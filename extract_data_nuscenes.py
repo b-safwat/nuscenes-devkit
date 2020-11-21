@@ -1,4 +1,6 @@
 import math
+import shutil
+
 import numpy as np
 
 from nuscenes import NuScenes
@@ -14,6 +16,7 @@ from Formats import FORMAT_FOR_MODEL
 class NuScenesFormatTransformer:
     def __init__(self, DATAROOT='./data/sets/nuscenes', dataset_version='v1.0-mini'):
         self.DATAROOT = DATAROOT
+        self.dataset_version = dataset_version
         self.nuscenes = NuScenes(dataset_version, dataroot=self.DATAROOT)
         self.helper = PredictHelper(self.nuscenes)
         # ['vehicle.car', 'vehicle.truck', 'vehicle.bus.rigid', 'vehicle.bus.bendy', 'vehicle.construction']
@@ -132,8 +135,18 @@ class NuScenesFormatTransformer:
                 traj_sample, sample_token = trajectory[i], trajectory_full_instances[i]["sample_token"]
                 sample_id = sample_token_to_id_dict[sample_token]
                 if format_for_model.value == FORMAT_FOR_MODEL.TRANSFORMER_NET.value:
-                    samples_new_format.append(str(sample_id) + splitting_format + str(instance_id)\
-                                           + splitting_format + str(traj_sample[0]) + splitting_format + str(traj_sample[1]) + "\n")
+                    yaw = quaternion_yaw(Quaternion(trajectory_full_instances[i]["rotation"]))
+
+                    # samples_new_format.append(str(sample_id) + splitting_format + str(instance_id)\
+                    #                           + splitting_format + str(traj_sample[0]) + splitting_format \
+                    #                           + str(traj_sample[1]) + splitting_format + str(yaw) + "\n")
+                    x, y, z = trajectory_full_instances[i]["translation"]
+                    w,l,h = trajectory_full_instances[i]["size"]
+
+                    samples_new_format.append(str(sample_id) + splitting_format + str(instance_id) #+ splitting_format + str(object_type)\
+                                              + splitting_format + str(x) + splitting_format + str(y) #+ splitting_format + str(z)
+                                              # + splitting_format + str(l) + splitting_format + str(w) + splitting_format + str(h)
+                                              + splitting_format + str(yaw) + "\n")
                 elif format_for_model.value == FORMAT_FOR_MODEL.TRAFFIC_PREDICT.value:
                     # raise Exception("not implemented yet")
                     category_token = self.nuscenes.get("instance", instance_token)["category_token"]
@@ -174,12 +187,18 @@ class NuScenesFormatTransformer:
         print(out_file + "size " + str(ds_size))
 
     def run(self, format_for_model):
-        # train_agents = get_prediction_challenge_split("mini_train", dataroot=self.DATAROOT)
-        # val_agents = get_prediction_challenge_split("mini_val", dataroot=self.DATAROOT)
-        train_agents = get_prediction_challenge_split("train", dataroot=self.DATAROOT)
-        val_agents = get_prediction_challenge_split("val", dataroot=self.DATAROOT)
-        self.get_new_format(train_agents, format_for_model, "transformer_train.txt")
-        self.get_new_format(val_agents, format_for_model, "transformer_val.txt")
+        if self.dataset_version.find("mini") != -1:
+            train_agents = get_prediction_challenge_split("mini_train", dataroot=self.DATAROOT)
+            val_agents = get_prediction_challenge_split("mini_val", dataroot=self.DATAROOT)
+        else:
+            train_agents = get_prediction_challenge_split("train", dataroot=self.DATAROOT)
+            train_agents.extend(get_prediction_challenge_split("train_val", dataroot=self.DATAROOT))
+            val_agents = get_prediction_challenge_split("val", dataroot=self.DATAROOT)
+
+        self.get_new_format(train_agents, format_for_model, "/home/bassel/PycharmProjects/Trajectory-Transformer/datasets/nuscenes/bkup/transformer_train_"+self.dataset_version+".txt")
+        self.get_new_format(val_agents, format_for_model, "/home/bassel/PycharmProjects/Trajectory-Transformer/datasets/nuscenes/bkup/transformer_val_"+self.dataset_version+".txt")
+        # shutil.copy("/home/bassel/PycharmProjects/Trajectory-Transformer/datasets/nuscenes/val/transformer_val_"+self.dataset_version+".txt",
+        #             "/home/bassel/PycharmProjects/Trajectory-Transformer/datasets/nuscenes/test/transformer_val_"+self.dataset_version+".txt")
 
     def get_trajectory_around_sample(self, instance_token, sample_token, just_xy=True,
                                      num_seconds=1000, in_agent_frame=False):
@@ -204,9 +223,31 @@ class NuScenesFormatTransformer:
 
 
 if __name__ == '__main__':
-    n = NuScenesFormatTransformer('/media/bassel/Entertainment/nuscenes/v1.0-trainval01_blobs',
-                                  'v1.0-trainval')
-    # n = NuScenesFormatTransformer()
+    copy = True
+    mini = False
 
-    # n.run( FORMAT_FOR_MODEL.TRANSFORMER_NET)
-    n.run(FORMAT_FOR_MODEL.TRAFFIC_PREDICT)
+    if copy:
+        if mini:
+            shutil.copy("/home/bassel/PycharmProjects/Trajectory-Transformer/datasets/nuscenes/bkup/transformer_train_v1.0-mini.txt",
+                        "/home/bassel/PycharmProjects/Trajectory-Transformer/datasets/nuscenes/train/transformer_train.txt")
+            shutil.copy("/home/bassel/PycharmProjects/Trajectory-Transformer/datasets/nuscenes/bkup/transformer_val_v1.0-mini.txt",
+                        "/home/bassel/PycharmProjects/Trajectory-Transformer/datasets/nuscenes/val/transformer_val.txt")
+            shutil.copy("/home/bassel/PycharmProjects/Trajectory-Transformer/datasets/nuscenes/bkup/transformer_val_v1.0-mini.txt",
+                        "/home/bassel/PycharmProjects/Trajectory-Transformer/datasets/nuscenes/test/transformer_val.txt")
+        else:
+            shutil.copy("/home/bassel/PycharmProjects/Trajectory-Transformer/datasets/nuscenes/bkup/transformer_train_v1.0-trainval.txt",
+                        "/home/bassel/PycharmProjects/Trajectory-Transformer/datasets/nuscenes/train/transformer_train.txt")
+            shutil.copy("/home/bassel/PycharmProjects/Trajectory-Transformer/datasets/nuscenes/bkup/transformer_val_v1.0-trainval.txt",
+                        "/home/bassel/PycharmProjects/Trajectory-Transformer/datasets/nuscenes/val/transformer_val.txt")
+            shutil.copy("/home/bassel/PycharmProjects/Trajectory-Transformer/datasets/nuscenes/bkup/transformer_val_v1.0-trainval.txt",
+                        "/home/bassel/PycharmProjects/Trajectory-Transformer/datasets/nuscenes/test/transformer_val.txt")
+    else:
+        if not mini:
+            n = NuScenesFormatTransformer('/media/bassel/Entertainment/nuscenes/v1.0-trainval01_blobs',
+                                      'v1.0-trainval')
+        else:
+            n = NuScenesFormatTransformer('/media/bassel/Entertainment/nuscenes/',
+                                          'v1.0-mini')
+
+        n.run(FORMAT_FOR_MODEL.TRANSFORMER_NET)
+        # n.run(FORMAT_FOR_MODEL.TRAFFIC_PREDICT)
